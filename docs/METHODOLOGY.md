@@ -80,6 +80,15 @@ A result is called only when the entire interval sits on one side of one half.
 Otherwise the verdict is inconclusive, which is treated as a first class and
 honest outcome rather than a failure.
 
+Alongside the win rate the pipeline fits a Bradley Terry model over the pairwise
+outcomes. Bradley Terry is the standard model for paired comparison data and is
+the same objective a reward model is trained on, so it is the natural ranking
+lens for this problem. It assigns each policy a strength and yields an implied
+probability that one policy is preferred over another, which for two policies
+tracks the observed win rate and for more than two policies produces a coherent
+transitive ranking. Ties are entered as half wins, which is a simple and common
+treatment; Davidson's extension models ties explicitly and is the next step.
+
 ## Known limitations
 
 The heuristic judge is a stand in, and on real data a calibrated LLM judge will

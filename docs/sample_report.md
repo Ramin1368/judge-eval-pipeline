@@ -35,6 +35,7 @@ Win rate for B (ties count as 0.5): 66.2%
 95 percent CI: [55.0%, 76.2%] (percentile bootstrap over prompts, 10k resamples, 95 percent)
 Significance: p = 0.0049 (two sided exact binomial sign test vs 0.5)
 Length controlled win rate for B: 66.2%
+Bradley-Terry strengths: policy_a=0.717, policy_b=1.395, implied P(B preferred)=66.0%
 
 ## Data quality
 

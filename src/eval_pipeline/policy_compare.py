@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from .bradley_terry import fit_bradley_terry, win_probability
 from .schemas import Preference, PolicyComparisonResult
 from .judges.base import Judge
 from .stats import summarize_scores
@@ -45,6 +46,13 @@ def compare_policies(
         if (max(la, lb) / min(la, lb)) <= length_parity_ratio:
             parity_scores.append(s)
 
+    win_counts = {
+        (policy_b, policy_a): sum(1.0 if s == 1.0 else 0.5 if s == 0.5 else 0.0 for s in scores),
+        (policy_a, policy_b): sum(1.0 if s == 0.0 else 0.5 if s == 0.5 else 0.0 for s in scores),
+    }
+    bt = fit_bradley_terry(win_counts)
+    bt_prob_b = win_probability(bt, policy_b, policy_a)
+
     summ = summarize_scores(scores, seed=seed)
     lo, hi = summ["bootstrap_ci"]
     wr = summ["win_rate_b"]
@@ -82,5 +90,8 @@ def compare_policies(
         significance_test="two sided exact binomial sign test vs 0.5",
         winner=winner,
         length_controlled_win_rate_b=length_controlled,
+        bt_strength_a=bt[policy_a],
+        bt_strength_b=bt[policy_b],
+        bt_win_prob_b=bt_prob_b,
         notes=notes,
     )

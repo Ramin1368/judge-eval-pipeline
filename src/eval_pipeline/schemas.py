@@ -83,4 +83,7 @@ class PolicyComparisonResult:
     significance_test: str
     winner: str
     length_controlled_win_rate_b: Optional[float] = None
+    bt_strength_a: Optional[float] = None
+    bt_strength_b: Optional[float] = None
+    bt_win_prob_b: Optional[float] = None
     notes: list[str] = field(default_factory=list)

@@ -95,6 +95,11 @@ def build_report(
     lines.append(f"Significance: p = {m.p_value:.4f} ({m.significance_test})")
     if m.length_controlled_win_rate_b is not None:
         lines.append(f"Length controlled win rate for B: {_pct(m.length_controlled_win_rate_b)}")
+    if m.bt_win_prob_b is not None:
+        lines.append(
+            f"Bradley-Terry strengths: {m.policy_a}={m.bt_strength_a:.3f}, {m.policy_b}={m.bt_strength_b:.3f}, "
+            f"implied P(B preferred)={_pct(m.bt_win_prob_b)}"
+        )
     for note in m.notes:
         lines.append(f"Note: {note}")
     lines.append("")
