@@ -1,0 +1,5 @@
+# Core pipeline has ZERO hard third-party dependencies (stdlib only) so it runs
+# anywhere. These are for the optional service layer and test runner.
+pytest>=7.0
+fastapi>=0.110
+uvicorn>=0.29

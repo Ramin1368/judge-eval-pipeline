@@ -1,0 +1,13 @@
+judge:
+  kind: heuristic
+calibration:
+  kappa_trust_threshold: 0.4
+  position_bias_max: 0.15
+stats:
+  bootstrap_resamples: 10000
+  alpha: 0.05
+  seed: 12345
+inference:
+  base_url_env: DO_INFERENCE_BASE_URL
+  api_key_env: DO_INFERENCE_API_KEY
+  model_env: DO_INFERENCE_MODEL

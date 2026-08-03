@@ -1,0 +1,21 @@
+flowchart LR
+    subgraph Inputs
+        A[Preference dataset<br/>prompt, A, B, preferred]
+        P[Held-out policy outputs<br/>policy_a, policy_b]
+    end
+
+    A --> I[Stage 1: Ingestion<br/>flexible CSV/JSONL parse<br/>bad rows collected, not fatal]
+    I --> V[Stage 1b: Validation<br/>dedupe, order-swap detect,<br/>majority-vote contradictions,<br/>quarantine unresolvable]
+    V --> C[Stage 2: Judge Calibration<br/>accuracy, Cohen's kappa,<br/>position-bias, per-slice<br/>-> TRUST GATE]
+
+    subgraph Judge
+        J1[Heuristic judge<br/>always-on baseline]
+        J2[DigitalOcean LLM judge<br/>inference endpoint<br/>+ heuristic fallback]
+    end
+    J1 -. calibrated by .-> C
+    J2 -. calibrated by .-> C
+
+    C -->|judge trustworthy| S[Stage 3: Policy Comparison<br/>both-order verdicts,<br/>win rate + ties=0.5,<br/>length-controlled check]
+    P --> S
+    S --> T[Statistics<br/>bootstrap CI over prompts,<br/>Wilson CI, sign test]
+    T --> R[Stage 4: Report<br/>stakeholder verdict +<br/>calibration + stats +<br/>data-quality appendix]
