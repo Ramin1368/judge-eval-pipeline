@@ -14,9 +14,15 @@ def build_report(
     validation: ValidationReport | None = None,
     judge_name: str = "judge",
     judge_table: list[dict] | None = None,
+    cache_stats: dict | None = None,
 ) -> str:
     c, m = calibration, comparison
-    trust = "TRUSTWORTHY" if c.trustworthy else "USE WITH CAUTION"
+    if c.trustworthy_with_reserve:
+        trust = "TRUSTWORTHY"
+    elif c.trustworthy:
+        trust = "TRUSTWORTHY WITH RESERVE"
+    else:
+        trust = "USE WITH CAUTION"
 
     if m.winner.startswith("inconclusive"):
         headline = (
@@ -39,12 +45,21 @@ def build_report(
     lines.append("# Policy Evaluation Report\n")
     lines.append("## For a non-research stakeholder\n")
     lines.append(headline + "\n")
+    kappa_ci = ""
+    if c.kappa_ci_low is not None and c.kappa_ci_high is not None:
+        kappa_ci = f" (95% CI [{c.kappa_ci_low:.2f}, {c.kappa_ci_high:.2f}])"
     lines.append(
         f"How much should you trust this? The automated judge was checked against "
         f"real human preferences before we used it, and it rated **{trust}** "
-        f"(chance corrected agreement, Cohen's kappa, of {c.cohen_kappa:.2f}). "
-        + ("Treat the verdict above as reliable.\n" if c.trustworthy else
-           "Treat the verdict above as directional, not definitive.\n")
+        f"(chance corrected agreement, Cohen's kappa, of {c.cohen_kappa:.2f}{kappa_ci}). "
+        + (
+            "Treat the verdict above as reliable.\n"
+            if c.trustworthy_with_reserve
+            else "Treat the verdict above as directional; the kappa lower bound sits under the trust gate, "
+                 "so the same judge on a different sample might not pass calibration.\n"
+            if c.trustworthy
+            else "Treat the verdict above as directional, not definitive.\n"
+        )
     )
     if m.length_controlled_win_rate_b is not None:
         gap = abs(m.length_controlled_win_rate_b - m.win_rate_b)
@@ -59,7 +74,13 @@ def build_report(
     lines.append(f"Judge: {judge_name}")
     lines.append(f"Labeled items evaluated: {c.n}")
     lines.append(f"Raw agreement with humans (accuracy): {_pct(c.accuracy)}")
-    lines.append(f"Cohen's kappa (chance corrected): {c.cohen_kappa:.3f} (trust gate at least 0.40)")
+    if c.kappa_ci_low is not None:
+        lines.append(
+            f"Cohen's kappa: {c.cohen_kappa:.3f} (95% CI [{c.kappa_ci_low:.3f}, {c.kappa_ci_high:.3f}], "
+            f"trust gate at least 0.40; 'with reserve' means point clears the gate but CI does not)"
+        )
+    else:
+        lines.append(f"Cohen's kappa (chance corrected): {c.cohen_kappa:.3f} (trust gate at least 0.40)")
     lines.append(f"Position bias rate (verdict flips on A/B swap): {_pct(c.position_bias_rate)}")
     if c.expected_calibration_error is not None:
         lines.append(f"Expected calibration error (confidence vs correctness): {c.expected_calibration_error:.3f}")
@@ -92,17 +113,41 @@ def build_report(
     lines.append(f"Wins: A={m.wins_a}, B={m.wins_b}, ties or unstable={m.ties}")
     lines.append(f"Win rate for B (ties count as 0.5): {_pct(m.win_rate_b)}")
     lines.append(f"95 percent CI: [{_pct(m.ci_low)}, {_pct(m.ci_high)}] ({m.ci_method})")
+    if m.percentile_ci is not None:
+        lines.append(
+            f"Percentile bootstrap cross-check: [{_pct(m.percentile_ci[0])}, {_pct(m.percentile_ci[1])}]"
+        )
     lines.append(f"Significance: p = {m.p_value:.4f} ({m.significance_test})")
+    if m.mde is not None:
+        lines.append(
+            f"Minimum detectable effect (alpha=0.05, power=0.80): "
+            f"{_pct(m.mde)} absolute shift from 0.5; results smaller than this cannot be reliably detected at this n"
+        )
     if m.length_controlled_win_rate_b is not None:
         lines.append(f"Length controlled win rate for B: {_pct(m.length_controlled_win_rate_b)}")
     if m.bt_win_prob_b is not None:
+        ci_txt = ""
+        if m.bt_win_prob_b_ci is not None:
+            ci_txt = f" (95% CI [{_pct(m.bt_win_prob_b_ci[0])}, {_pct(m.bt_win_prob_b_ci[1])}])"
         lines.append(
             f"Bradley-Terry strengths: {m.policy_a}={m.bt_strength_a:.3f}, {m.policy_b}={m.bt_strength_b:.3f}, "
-            f"implied P(B preferred)={_pct(m.bt_win_prob_b)}"
+            f"implied P(B preferred)={_pct(m.bt_win_prob_b)}{ci_txt}"
+        )
+        lines.append(
+            "  Note: for two policies BT reduces to the win rate; the model earns its keep at 3+ policies "
+            "and by providing a bootstrap CI on strengths for ranking stability."
         )
     for note in m.notes:
         lines.append(f"Note: {note}")
     lines.append("")
+
+    if cache_stats is not None:
+        lines.append("## Judge cache\n")
+        lines.append(
+            f"Hits: {cache_stats['hits']}, misses: {cache_stats['misses']}, "
+            f"writes: {cache_stats['writes']}, hit rate: {_pct(cache_stats['hit_rate'])}"
+        )
+        lines.append("")
 
     if validation is not None:
         v = validation
@@ -114,7 +159,10 @@ def build_report(
         if v.human_self_consistency is not None:
             lines.append(f"Human self consistency: {_pct(v.human_self_consistency)}")
         if v.fleiss_kappa is not None:
-            lines.append(f"Inter annotator agreement (Fleiss kappa): {v.fleiss_kappa:.3f}")
+            lines.append(
+                f"Inter annotator agreement (Fleiss kappa, variable rater count aware): "
+                f"{v.fleiss_kappa:.3f}"
+            )
         for msg in v.messages[:8]:
             lines.append(f"    {msg}")
         if len(v.messages) > 8:
@@ -134,7 +182,12 @@ def build_html_report(
     chart = _ci_chart_svg(m.win_rate_b, m.ci_low, m.ci_high)
     rel = _reliability_svg(calibration.reliability_bins)
     verdict = m.winner if not m.winner.startswith("inconclusive") else "Inconclusive"
-    trust = "Trustworthy" if calibration.trustworthy else "Use with caution"
+    if calibration.trustworthy_with_reserve:
+        trust = "Trustworthy"
+    elif calibration.trustworthy:
+        trust = "Trustworthy with reserve"
+    else:
+        trust = "Use with caution"
 
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><title>Policy Evaluation Report</title>
@@ -152,13 +205,14 @@ table{{border-collapse:collapse;width:100%;font-size:13px}} td,th{{border:1px so
 <div class="verdict">Winner: {verdict} &nbsp; ({_pct(m.win_rate_b)} win rate for {m.policy_b})</div>
 <div class="kpis">
   <div class="kpi"><div class="v">{_pct(m.win_rate_b)}</div><div class="l">Win rate B</div></div>
-  <div class="kpi"><div class="v">[{_pct(m.ci_low)}, {_pct(m.ci_high)}]</div><div class="l">95% CI</div></div>
+  <div class="kpi"><div class="v">[{_pct(m.ci_low)}, {_pct(m.ci_high)}]</div><div class="l">95% CI (BCa)</div></div>
   <div class="kpi"><div class="v">{m.p_value:.4f}</div><div class="l">p value</div></div>
   <div class="kpi"><div class="v">{calibration.cohen_kappa:.2f}</div><div class="l">Judge kappa ({trust})</div></div>
+  <div class="kpi"><div class="v">{_pct(m.mde) if m.mde is not None else 'n/a'}</div><div class="l">MDE at n={m.n_prompts}</div></div>
 </div>
 <h2>Win rate with 95% confidence interval</h2>
 {chart}
-<p class="muted">The bar is the point estimate. The whisker is the 95% bootstrap interval. If it crosses the 50% line, the result is inconclusive.</p>
+<p class="muted">The bar is the point estimate. The whisker is the 95% BCa bootstrap interval. If it crosses the 50% line, the result is inconclusive.</p>
 <h2>Judge confidence calibration</h2>
 {rel}
 <p class="muted">Points on the diagonal mean the judge's stated confidence matches its actual accuracy. ECE = {calibration.expected_calibration_error:.3f}.</p>

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from .bradley_terry import fit_bradley_terry, win_probability
+from .bradley_terry import bt_bootstrap_ci, fit_bradley_terry, win_probability
 from .schemas import Preference, PolicyComparisonResult
 from .judges.base import Judge
-from .stats import summarize_scores
+from .stats import minimum_detectable_effect, summarize_scores
 
 
 def _pair_outputs(rows: list[dict], policy_a: str, policy_b: str) -> list[tuple[str, str, str]]:
@@ -31,6 +31,7 @@ def compare_policies(
     policy_b: str,
     seed: int = 12345,
     length_parity_ratio: float = 1.5,
+    bt_boot: int = 2000,
 ) -> PolicyComparisonResult:
     triples = _pair_outputs(rows, policy_a, policy_b)
     if not triples:
@@ -52,6 +53,7 @@ def compare_policies(
     }
     bt = fit_bradley_terry(win_counts)
     bt_prob_b = win_probability(bt, policy_b, policy_a)
+    bt_ci = bt_bootstrap_ci(scores, policy_a, policy_b, n_boot=bt_boot, seed=seed)
 
     summ = summarize_scores(scores, seed=seed)
     lo, hi = summ["bootstrap_ci"]
@@ -85,7 +87,7 @@ def compare_policies(
         win_rate_b=wr,
         ci_low=lo,
         ci_high=hi,
-        ci_method="percentile bootstrap over prompts, 10k resamples, 95 percent",
+        ci_method="BCa bootstrap over prompts, 10k resamples, 95 percent",
         p_value=summ["p_value"],
         significance_test="two sided exact binomial sign test vs 0.5",
         winner=winner,
@@ -93,5 +95,10 @@ def compare_policies(
         bt_strength_a=bt[policy_a],
         bt_strength_b=bt[policy_b],
         bt_win_prob_b=bt_prob_b,
+        bt_strength_a_ci=bt_ci["strength_a_ci"],
+        bt_strength_b_ci=bt_ci["strength_b_ci"],
+        bt_win_prob_b_ci=bt_ci["win_prob_b_ci"],
+        percentile_ci=summ["percentile_ci"],
+        mde=minimum_detectable_effect(summ["n"]),
         notes=notes,
     )

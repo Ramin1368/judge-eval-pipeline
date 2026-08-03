@@ -41,8 +41,9 @@ PYTHONPATH=src python -m eval_pipeline.cli \
   --preferences data/preferences.csv \
   --policies data/policy_outputs.csv \
   --policy-a policy_a --policy-b policy_b \
-  --judge heuristic --compare-judges heuristic \
-  --out report.md --html report.html
+  --config config/config.yaml \
+  --compare-judges heuristic \
+  --out report.md --html report.html --out-json report.json
 ```
 
 This writes a Markdown report and an HTML report with a win rate chart and a
@@ -52,7 +53,7 @@ judge calibration curve. To use DigitalOcean inference as the judge:
 export DO_INFERENCE_BASE_URL=https://inference.do-ai.run/v1
 export DO_INFERENCE_API_KEY=your_model_access_key
 export DO_INFERENCE_MODEL=llama3.3-70b-instruct
-PYTHONPATH=src python -m eval_pipeline.cli ... --judge llm --compare-judges heuristic llm
+PYTHONPATH=src python -m eval_pipeline.cli ... --live-llm --compare-judges heuristic llm
 ```
 
 The LLM judge falls back to the heuristic on any error or missing key, and the
@@ -93,12 +94,16 @@ App Platform with `service/.do/app.yaml` or containerize with
 
 A policy can inflate its win rate by padding responses with on topic but low
 value text, exploiting a judge's mild length sensitivity rather than being
-better. The pipeline mitigates this in two layers. The rubric instructs the LLM
-judge not to reward length, and the heuristic length prior is kept weak. Policy
-comparison then reports a length controlled win rate computed only on prompts
-where the two responses are of comparable length, and flags a large gap between
-the raw and length controlled figures as possible gaming. The natural next step
-is a length debiased judge that regresses the length effect out of the reward.
+better. The pipeline mitigates this in three layers, all backed by tests. The
+rubric instructs the LLM judge not to reward length, and the heuristic length
+prior is kept weak. Policy comparison reports a length controlled win rate
+computed only on prompts where the two responses are of comparable length, and
+flags a large gap between the raw and length controlled figures as possible
+gaming. Finally, `src/eval_pipeline/adversarial.py` ships two named attack
+policies (`verbosity_padding_policy`, `sycophancy_policy`) and
+`tests/test_adversarial.py` verifies that the mitigations catch them; when the
+heuristic *is* exploitable by an attack, that fact is documented as a passing
+test, which is the motivation for gating verdicts behind the trust check.
 
 ## Layout
 
@@ -106,15 +111,19 @@ is a length debiased judge that regresses the length effect out of the reward.
 src/eval_pipeline/
   ingestion.py        flexible CSV and JSONL loading with error collection
   validation.py       dedupe, order swap, majority vote, quarantine
-  agreement.py        Fleiss inter annotator agreement
-  judges/             order robust base, heuristic, DigitalOcean LLM with fallback
-  calibration.py      accuracy, Cohen kappa, position bias, trust gate
+  agreement.py        Fleiss inter annotator agreement (variable rater count aware)
+  judges/             order robust base, heuristic, cached DigitalOcean LLM with retries+fallback
+  calibration.py      accuracy, Cohen kappa with bootstrap CI, position bias, two-state trust gate
   reliability.py      confidence calibration curve and expected calibration error
-  stats.py            bootstrap CI, Wilson CI, exact sign test, minimum effect
-  policy_compare.py   both order verdicts, win rate, length control
+  stats.py            BCa bootstrap (primary), percentile bootstrap (cross-check), Wilson CI, exact sign test, MDE, kappa bootstrap CI
+  policy_compare.py   both order verdicts, win rate, length control, BCa CI
+  bradley_terry.py    BT strengths with tie handling and bootstrap CI
+  adversarial.py      verbosity padding and sycophancy attack policies for reward-hacking tests
+  cache.py            LLM verdict cache: Protocol, JSON file backend, Valkey adapter
+  config.py           YAML config loader wired through the CLI
   compare_judges.py   side by side judge calibration table
-  report.py           Markdown and HTML reports with charts
-  cli.py              end to end entry point
+  report.py           Markdown and HTML reports with charts, kappa CI, MDE, BT CI, cache stats
+  cli.py              end to end entry point with --config, --live-llm, --benchmark, --out-json
 tests/                unit tests across stats, validation, calibration, agreement
 scripts/              synthetic data generator, droplet setup
 service/              FastAPI app, Dockerfile, App Platform spec

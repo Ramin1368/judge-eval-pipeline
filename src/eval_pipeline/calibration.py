@@ -1,5 +1,17 @@
 from __future__ import annotations
 
+"""Judge calibration with a defensible trust gate.
+
+The trust gate must be more than a point estimate. Cohen's kappa on 10-100
+items has a wide sampling distribution; reporting only the point value and
+comparing it to 0.4 hides real uncertainty. This module reports the kappa
+point estimate, its bootstrap 95% CI, and two trust flags:
+
+* ``trustworthy`` uses the point estimate (backwards compatible).
+* ``trustworthy_with_reserve`` is True only if the kappa lower CI bound also
+  clears the threshold. The report and downstream messaging surface both.
+"""
+
 from collections import Counter
 from statistics import mean
 
@@ -25,7 +37,13 @@ def cohen_kappa(labels_true: list[str], labels_pred: list[str]) -> float:
     return (observed - expected) / (1.0 - expected)
 
 
-def calibrate_judge(judge: Judge, examples: list[PreferenceExample], slice_fn=None) -> CalibrationReport:
+def calibrate_judge(
+    judge: Judge,
+    examples: list[PreferenceExample],
+    slice_fn=None,
+    kappa_ci_boot: int = 2000,
+    seed: int = 12345,
+) -> CalibrationReport:
     human: list[str] = []
     pred: list[str] = []
     position_flags: list[bool] = []
@@ -55,12 +73,27 @@ def calibrate_judge(judge: Judge, examples: list[PreferenceExample], slice_fn=No
     bins, ece = reliability_curve(confidences, correct_flags)
     fallback_rate = getattr(judge, "fallback_rate", lambda: None)()
 
+    # Bootstrap CI on kappa. Imported lazily to avoid the stats <-> calibration cycle.
+    kappa_lo = kappa_hi = None
+    if n >= 2:
+        from .stats import kappa_bootstrap_ci
+        kappa_lo, kappa_hi = kappa_bootstrap_ci(human, pred, n_boot=kappa_ci_boot, seed=seed)
+
     notes: list[str] = []
     trustworthy = kappa >= KAPPA_TRUST_THRESHOLD and position_bias <= POSITION_BIAS_MAX
+    trustworthy_with_reserve = (
+        trustworthy and (kappa_lo is not None) and (kappa_lo >= KAPPA_TRUST_THRESHOLD)
+    )
     if kappa < KAPPA_TRUST_THRESHOLD:
         notes.append(
             f"kappa {kappa:.3f} below {KAPPA_TRUST_THRESHOLD}, judge agreement with humans is weak, "
             f"treat policy verdicts as low confidence"
+        )
+    elif not trustworthy_with_reserve and kappa_lo is not None:
+        notes.append(
+            f"kappa point estimate {kappa:.3f} clears the {KAPPA_TRUST_THRESHOLD} gate, but its 95 percent "
+            f"lower bound is {kappa_lo:.3f}, so agreement may fall below the gate on a different sample; "
+            f"the trust flag is 'trustworthy with reserve'"
         )
     if position_bias > POSITION_BIAS_MAX:
         notes.append(
@@ -82,6 +115,9 @@ def calibrate_judge(judge: Judge, examples: list[PreferenceExample], slice_fn=No
         reliability_bins=[b.__dict__ for b in bins],
         fallback_rate=fallback_rate,
         trustworthy=trustworthy,
+        kappa_ci_low=kappa_lo,
+        kappa_ci_high=kappa_hi,
+        trustworthy_with_reserve=trustworthy_with_reserve,
         notes=notes,
     )
 

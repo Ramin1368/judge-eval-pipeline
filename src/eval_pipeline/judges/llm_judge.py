@@ -1,10 +1,25 @@
 from __future__ import annotations
 
+"""DigitalOcean-inference judge with caching, exponential backoff, and heuristic fallback.
+
+The cache is passed in rather than constructed here so the same judge
+instance can be reused across the calibration loop, judge comparison, and
+policy comparison passes without re-issuing identical requests. When the
+API key is unset (or the request fails after retries) the judge silently
+falls back to the heuristic and reports a fallback rate so the calibration
+consumer knows how much of the verdict was live vs offline.
+"""
+
 import json
 import os
+import random
 import re
+import time
+import urllib.error
 import urllib.request
+from typing import Optional
 
+from ..cache import Cache, make_cache_key
 from ..schemas import JudgeVerdict, Preference
 from .base import Judge
 from .heuristic import HeuristicJudge
@@ -35,23 +50,47 @@ class DigitalOceanLLMJudge(Judge):
         api_key: str | None = None,
         timeout: float = 30.0,
         fallback: Judge | None = None,
+        cache: Optional[Cache] = None,
+        temperature: float = 0.0,
+        seed: int = 12345,
+        max_retries: int = 3,
+        backoff_base: float = 0.5,
     ):
         self.base_url = (base_url or os.getenv("DO_INFERENCE_BASE_URL", "https://inference.do-ai.run/v1")).rstrip("/")
         self.api_key = api_key or os.getenv("DO_INFERENCE_API_KEY", "")
         self.model = model or os.getenv("DO_INFERENCE_MODEL", "llama3.3-70b-instruct")
         self.timeout = timeout
         self.fallback = fallback or HeuristicJudge()
+        self.cache = cache
+        self.temperature = temperature
+        self.seed = seed
+        self.max_retries = max_retries
+        self.backoff_base = backoff_base
         self.fallback_count = 0
         self.call_count = 0
 
     def _decide(self, prompt: str, response_a: str, response_b: str) -> JudgeVerdict:
         self.call_count += 1
+
+        cache_key = None
+        if self.cache is not None:
+            cache_key = make_cache_key(
+                self.model, prompt, response_a, response_b, self.temperature, self.seed
+            )
+            cached = self.cache.get(cache_key)
+            if cached is not None:
+                return _verdict_from_dict(cached)
+
         if not self.api_key:
             self.fallback_count += 1
             return self.fallback._decide(prompt, response_a, response_b)
+
         try:
-            raw = self._call_api(prompt, response_a, response_b)
-            return self._parse(raw)
+            raw = self._call_api_with_retry(prompt, response_a, response_b)
+            verdict = self._parse(raw)
+            if self.cache is not None and cache_key is not None:
+                self.cache.set(cache_key, _verdict_to_dict(verdict))
+            return verdict
         except Exception:
             self.fallback_count += 1
             return self.fallback._decide(prompt, response_a, response_b)
@@ -59,10 +98,29 @@ class DigitalOceanLLMJudge(Judge):
     def fallback_rate(self) -> float:
         return self.fallback_count / self.call_count if self.call_count else 0.0
 
+    def _call_api_with_retry(self, prompt: str, a: str, b: str) -> str:
+        last_err: Optional[Exception] = None
+        for attempt in range(self.max_retries):
+            try:
+                return self._call_api(prompt, a, b)
+            except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
+                last_err = e
+                sleep = self.backoff_base * (2 ** attempt) + random.random() * 0.1
+                time.sleep(sleep)
+            except urllib.error.HTTPError as e:
+                if e.code in (429, 500, 502, 503, 504):
+                    last_err = e
+                    sleep = self.backoff_base * (2 ** attempt) + random.random() * 0.1
+                    time.sleep(sleep)
+                    continue
+                raise
+        assert last_err is not None
+        raise last_err
+
     def _call_api(self, prompt: str, a: str, b: str) -> str:
         payload = {
             "model": self.model,
-            "temperature": 0.0,
+            "temperature": self.temperature,
             "max_tokens": 200,
             "messages": [
                 {"role": "system", "content": _SYSTEM},
@@ -94,3 +152,21 @@ class DigitalOceanLLMJudge(Judge):
             raise ValueError(f"bad winner field: {winner!r}")
         conf = float(obj.get("confidence", 0.7))
         return JudgeVerdict(pref, confidence=max(0.0, min(1.0, conf)), rationale=str(obj.get("reason", "")))
+
+
+def _verdict_to_dict(v: JudgeVerdict) -> dict:
+    return {
+        "preferred": v.preferred.value,
+        "confidence": v.confidence,
+        "rationale": v.rationale,
+        "position_unstable": v.position_unstable,
+    }
+
+
+def _verdict_from_dict(d: dict) -> JudgeVerdict:
+    return JudgeVerdict(
+        preferred=Preference(d["preferred"]),
+        confidence=float(d.get("confidence", 1.0)),
+        rationale=str(d.get("rationale", "")),
+        position_unstable=bool(d.get("position_unstable", False)),
+    )

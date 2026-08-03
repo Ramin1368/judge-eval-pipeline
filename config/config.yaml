@@ -7,6 +7,8 @@ stats:
   bootstrap_resamples: 10000
   alpha: 0.05
   seed: 12345
+cache:
+  path: .cache/judge_verdicts.json
 inference:
   base_url_env: DO_INFERENCE_BASE_URL
   api_key_env: DO_INFERENCE_API_KEY

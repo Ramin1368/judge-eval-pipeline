@@ -64,6 +64,9 @@ class CalibrationReport:
     reliability_bins: list = field(default_factory=list)
     fallback_rate: Optional[float] = None
     trustworthy: bool = False
+    kappa_ci_low: Optional[float] = None
+    kappa_ci_high: Optional[float] = None
+    trustworthy_with_reserve: bool = False
     notes: list[str] = field(default_factory=list)
 
 
@@ -86,4 +89,9 @@ class PolicyComparisonResult:
     bt_strength_a: Optional[float] = None
     bt_strength_b: Optional[float] = None
     bt_win_prob_b: Optional[float] = None
+    bt_strength_a_ci: Optional[tuple] = None
+    bt_strength_b_ci: Optional[tuple] = None
+    bt_win_prob_b_ci: Optional[tuple] = None
+    percentile_ci: Optional[tuple] = None
+    mde: Optional[float] = None
     notes: list[str] = field(default_factory=list)

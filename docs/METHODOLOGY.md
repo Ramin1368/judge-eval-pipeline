@@ -61,13 +61,18 @@ fails the report still runs but labels the verdict low confidence.
 The pipeline also measures how well the judge's stated confidence matches its
 actual accuracy, reported as a reliability curve and an expected calibration
 error, and it reports inter annotator agreement using Fleiss kappa over the
-repeated human labels.
+repeated human labels. The Fleiss implementation supports variable rater counts
+per item, so items with 2, 3, or 5 annotators all contribute correctly rather
+than being silently truncated to the minimum.
 
 ## Statistical choices
 
-The primary interval is a percentile bootstrap over prompts with ten thousand
-resamples. It makes no distributional assumption, handles the one half tie
-scoring naturally, and respects the prompt as the unit of independence. A Wilson
+The primary interval is the BCa (bias-corrected and accelerated) bootstrap over
+prompts with ten thousand resamples. It makes no distributional assumption,
+handles the one half tie scoring naturally, respects the prompt as the unit of
+independence, and corrects for both bias and skew that the plain percentile
+bootstrap does not. The percentile bootstrap is retained as a cross-check in
+the report because disagreement between the two is itself diagnostic. A Wilson
 score interval on decisive items is reported as a closed form cross check,
 chosen over the naive normal interval because it behaves well for proportions
 near zero or one and at small sample sizes. Significance is a two sided exact
@@ -80,14 +85,43 @@ A result is called only when the entire interval sits on one side of one half.
 Otherwise the verdict is inconclusive, which is treated as a first class and
 honest outcome rather than a failure.
 
+Cohen's kappa is reported with a 95% bootstrap CI. At the sample sizes typical
+of judge calibration studies (10-100 items), a bare point estimate is nearly
+uninformative, and the 0.4 trust gate is only defensible when the reader sees
+how noisy the estimate is. Two flags are surfaced: `trustworthy` when the point
+estimate clears the gate, and `trustworthy_with_reserve` when the point clears
+the gate but the CI lower bound does not.
+
 Alongside the win rate the pipeline fits a Bradley Terry model over the pairwise
-outcomes. Bradley Terry is the standard model for paired comparison data and is
-the same objective a reward model is trained on, so it is the natural ranking
-lens for this problem. It assigns each policy a strength and yields an implied
-probability that one policy is preferred over another, which for two policies
-tracks the observed win rate and for more than two policies produces a coherent
-transitive ranking. Ties are entered as half wins, which is a simple and common
-treatment; Davidson's extension models ties explicitly and is the next step.
+outcomes with a bootstrap CI on the strengths. Bradley Terry is the standard
+model for paired comparison data and is the same objective a reward model is
+trained on, so it is the natural ranking lens for this problem. For two policies
+the BT strength ratio is algebraically equivalent to the raw win rate, so the
+point estimate alone adds no information; the bootstrap CI on strengths turns it
+into a real ranking-stability estimate and scaffolds the multi-policy case (3+
+policies where transitivity matters) without changing the API. Ties are entered
+as half wins, which is a simple and common treatment; Davidson's extension
+models ties explicitly and is the next step.
+
+## Reward hacking as a test suite
+
+Reward hacking is treated as a test category, not a paragraph. Two attack
+policies (`VerbosityPaddingPolicy`, `SycophancyPolicy`) live in
+`src/eval_pipeline/adversarial.py`, and `tests/test_adversarial.py` verifies
+that the length control catches verbosity padding and that both-order averaging
+suppresses spurious position bias from a sycophantic prefix. The current
+heuristic judge is documented (via a passing test) as exploitable by sycophancy
+on prompt-overlap, which is the exact motivation for gating any policy verdict
+behind the calibration trust check and preferring the length-controlled figure.
+
+## LLM verdict caching
+
+Calibration, judge comparison, and policy comparison all issue the same
+`(model, prompt, response_a, response_b)` requests. A `Cache` protocol with a
+JSON file backend (default) and a Valkey adapter (production) is passed into
+the LLM judge so each unique triple is judged once, then reused. The report
+surfaces hits, misses, writes, and hit rate so an operator can see how much of
+the evaluation cost was avoided.
 
 ## Known limitations
 
