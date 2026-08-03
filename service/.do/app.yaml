@@ -2,11 +2,17 @@ name: judge-eval-pipeline
 region: nyc
 services:
   - name: eval-api
+    github:
+      repo: Ramin1368/judge-eval-pipeline
+      branch: main
+      deploy_on_push: true
     dockerfile_path: service/Dockerfile
     source_dir: /
     http_port: 8080
     instance_size_slug: basic-xxs
     instance_count: 1
+    health_check:
+      http_path: /health
     routes:
       - path: /
     envs:
