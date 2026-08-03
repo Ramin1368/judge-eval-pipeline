@@ -31,6 +31,10 @@ class CompareRequest(BaseModel):
 @app.get('/health')
 def health() -> dict:
     return {'status': 'ok'}
+    
+@app.get('/')
+def root() -> dict:
+    return {'status': 'ok'}
 
 def _to_examples(items: list[LabeledItem]) -> list[PreferenceExample]:
     out = []
