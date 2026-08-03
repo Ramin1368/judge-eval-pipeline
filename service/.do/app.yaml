@@ -1,0 +1,16 @@
+name: judge-eval-pipeline
+region: nyc
+services:
+  - name: eval-api
+    dockerfile_path: service/Dockerfile
+    source_dir: /
+    http_port: 8080
+    instance_size_slug: basic-xxs
+    instance_count: 1
+    routes:
+      - path: /
+    envs:
+      - key: DO_INFERENCE_BASE_URL
+        value: https://inference.do-ai.run/v1
+      - key: DO_INFERENCE_MODEL
+        value: llama3.3-70b-instruct
