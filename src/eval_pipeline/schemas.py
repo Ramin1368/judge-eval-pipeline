@@ -1,26 +1,23 @@
 from __future__ import annotations
-
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
 
-
 class Preference(str, Enum):
-    A = "A"
-    B = "B"
-    TIE = "tie"
+    A = 'A'
+    B = 'B'
+    TIE = 'tie'
 
     @classmethod
-    def parse(cls, raw: object) -> "Preference":
+    def parse(cls, raw: object) -> 'Preference':
         s = str(raw).strip().lower()
-        if s in {"a", "response_a", "0", "left", "first"}:
+        if s in {'a', 'response_a', '0', 'left', 'first'}:
             return cls.A
-        if s in {"b", "response_b", "1", "right", "second"}:
+        if s in {'b', 'response_b', '1', 'right', 'second'}:
             return cls.B
-        if s in {"tie", "equal", "both", "neither", "same", "0.5"}:
+        if s in {'tie', 'equal', 'both', 'neither', 'same', '0.5'}:
             return cls.TIE
-        raise ValueError(f"Unrecognized preference label: {raw!r}")
-
+        raise ValueError(f'Unrecognized preference label: {raw!r}')
 
 @dataclass(frozen=True)
 class PreferenceExample:
@@ -28,28 +25,25 @@ class PreferenceExample:
     response_a: str
     response_b: str
     preferred: Preference
-    example_id: str = ""
+    example_id: str = ''
     annotator_id: Optional[str] = None
 
     def key(self) -> tuple[str, str, str]:
-        a, b = self.response_a, self.response_b
+        a, b = (self.response_a, self.response_b)
         return (self.prompt, *sorted((a, b)))
-
 
 @dataclass(frozen=True)
 class PolicyOutput:
     prompt: str
     response: str
-    prompt_id: str = ""
-
+    prompt_id: str = ''
 
 @dataclass
 class JudgeVerdict:
     preferred: Preference
     confidence: float = 1.0
-    rationale: str = ""
+    rationale: str = ''
     position_unstable: bool = False
-
 
 @dataclass
 class CalibrationReport:
@@ -68,7 +62,6 @@ class CalibrationReport:
     kappa_ci_high: Optional[float] = None
     trustworthy_with_reserve: bool = False
     notes: list[str] = field(default_factory=list)
-
 
 @dataclass
 class PolicyComparisonResult:

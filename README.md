@@ -123,7 +123,7 @@ src/eval_pipeline/
   config.py           YAML config loader wired through the CLI
   compare_judges.py   side by side judge calibration table
   report.py           Markdown and HTML reports with charts, kappa CI, MDE, BT CI, cache stats
-  cli.py              end to end entry point with --config, --live-llm, --benchmark, --out-json
+  cli.py              end to end entry point with --config, --live-llm, --out-json
 tests/                unit tests across stats, validation, calibration, agreement
 scripts/              synthetic data generator, droplet setup
 service/              FastAPI app, Dockerfile, App Platform spec
