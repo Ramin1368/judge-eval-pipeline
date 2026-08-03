@@ -91,7 +91,7 @@ def main(argv: list[str] | None = None) -> int:
           f"{validation.contradictory_groups} contradictions resolved, "
           f"fleiss={validation.fleiss_kappa}")
 
-    # Judge selection: --live-llm > --judge > config
+    # Judge selection precedence: --live-llm, then --judge, then config.
     kind = "llm" if args.live_llm else (args.judge or cfg.judge_kind)
     cache = None
     if kind in {"llm", "do", "do_llm", "digitalocean"} and not args.no_cache:

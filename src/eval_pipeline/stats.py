@@ -5,10 +5,10 @@ from __future__ import annotations
 Design decisions:
 
 * Bootstrap CI is BCa (bias-corrected and accelerated) by default. Percentile
-  bootstrap is retained as a cross-check because reviewers expect to see both
-  and disagreement between the two is itself diagnostic. The plain percentile
-  method under-covers when the sampling distribution is skewed, which happens
-  with binary preference data at small n, so it must not be the primary CI.
+  bootstrap is retained as a cross-check, and disagreement between the two
+  is itself diagnostic. The plain percentile method under-covers when the
+  sampling distribution is skewed, which happens with binary preference data
+  at small n, so it must not be the primary CI.
 * Bootstrap CIs are also produced for Cohen's kappa. A point estimate of
   kappa on ten items is essentially uninformative, and the trust gate at 0.4
   is only defensible if the CI is reported alongside it. The pipeline flags
@@ -16,7 +16,7 @@ Design decisions:
   the lower CI bound does not.
 * Percentile indices use ``ceil`` for the lower bound and ``floor`` for the
   upper bound, so the returned interval is at least the nominal (1-alpha)
-  wide. The previous implementation had an off-by-one on both ends.
+  wide.
 * The seed is a function argument for reproducibility. Every downstream
   consumer threads it through.
 """
@@ -148,7 +148,7 @@ def bca_bootstrap_ci(
     return replicates_sorted[lo_i], replicates_sorted[hi_i]
 
 
-# Backwards-compatible name; now uses BCa by default with percentile fallback.
+# Public wrapper: BCa by default with a percentile fallback.
 def bootstrap_ci(
     scores: Sequence[float],
     n_boot: int = 10000,

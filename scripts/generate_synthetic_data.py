@@ -2,29 +2,27 @@ from __future__ import annotations
 
 """Adversarially shaped synthetic data.
 
-Design intent: the demo dataset must not be a smoke test. Earlier versions
-produced heuristic kappa of 1.00 on 10 unique comparisons, which reads as
-"the judge was calibrated on data it was designed to solve." This generator
+The demo dataset is designed so the pipeline has real signal to report. It
 introduces three deliberate difficulty layers:
 
-1. Lexically similar distractors. Bad responses now share prompt tokens
-   (they are on-topic but wrong or vacuous), so the heuristic's token-overlap
+1. Lexically similar distractors. Bad responses share prompt tokens (they
+   are on-topic but wrong or vacuous), so the heuristic's token-overlap
    signal is noisy rather than perfect.
 2. Length parity. Good and bad responses are matched in length so the
-   length-controlled win rate is a real check, not a placebo that always
-   equals the raw figure.
-3. Realistic annotator noise. Labels flip with 15% probability, some prompts
-   receive contradictory annotations that must be resolved by majority, and a
-   subset of comparisons is genuinely ambiguous (three annotators split
-   evenly) to produce quarantined items.
+   length-controlled win rate is a real check rather than a placebo that
+   always equals the raw figure.
+3. Realistic annotator noise. Labels flip with 10% probability, some
+   prompts receive contradictory annotations that must be resolved by
+   majority, and a subset of comparisons is genuinely ambiguous (three
+   annotators split evenly) to produce quarantined items.
 
-The held-out policy set embeds the same shape: policy_b is genuinely better
-but not overwhelmingly so, and both policies produce responses of similar
-length so a length-only judge cannot separate them.
+The held-out policy set embeds the same shape: policy_b is genuinely
+better but not overwhelmingly so, and both policies produce responses of
+similar length so a length-only judge cannot separate them.
 
-The result is a dataset where a well-designed heuristic lands in the 0.4-0.6
-kappa range, the trust gate is a real decision point, and the LLM-versus-
-heuristic comparison actually has a signal to report.
+With this design, a well-designed heuristic lands in the 0.4 to 0.6 kappa
+range, the trust gate is a real decision point, and the LLM versus
+heuristic comparison has a real signal to report.
 """
 
 import csv

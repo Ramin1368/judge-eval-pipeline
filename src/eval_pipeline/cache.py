@@ -89,7 +89,7 @@ class JSONFileCache:
                 with self._path.open("r", encoding="utf-8") as fh:
                     self._data: dict[str, dict[str, Any]] = json.load(fh)
             except (json.JSONDecodeError, OSError):
-                # Corrupt cache is not fatal; start fresh but keep the old
+                # Corrupt cache is not fatal. Start fresh but preserve the
                 # file for post-mortem instead of deleting it.
                 self._data = {}
         else:

@@ -6,12 +6,11 @@ The vanilla BT point estimate degenerates to the raw win rate for two
 policies, which offers no additional information beyond ``win_rate_b``. Two
 things earn its keep here:
 
-1. It generalizes to 3+ policies where transitivity matters (this scaffolds
-   the future multi-policy comparison the reviewer will look for).
+1. It generalizes to 3+ policies where transitivity matters, so the same
+   API scales to multi-policy comparisons without a rewrite.
 2. A bootstrap CI on the strengths converts the point estimate into a
-   defensible statistic. Without a variance estimate a BT number and a raw
-   win rate are the same claim in different units, which is why the initial
-   BT addition was insufficient at the Staff bar.
+   ranking-stability statistic. Without a variance estimate a BT number
+   and a raw win rate are the same claim in different units.
 """
 
 import math

@@ -2,11 +2,11 @@ from __future__ import annotations
 
 """Reward-hacking regression tests.
 
-These tests are documentation-as-code for the reward-hacking section: they
-must fail if the pipeline stops distinguishing gamed responses from real
-improvements. They also serve a second purpose - they document *which*
-judges are exploitable by *which* attacks. When the LLM judge lands, its
-attack-resistance profile can be added here alongside the heuristic's.
+These tests are documentation-as-code for the reward-hacking section. They
+fail if the pipeline stops distinguishing gamed responses from real
+improvements, and they document which judges are exploitable by which
+attacks. When the LLM judge is added, its attack-resistance profile can
+be recorded here alongside the heuristic's.
 """
 
 from eval_pipeline.adversarial import (
@@ -50,20 +50,20 @@ def test_verbosity_padding_is_caught_by_length_control():
 
 
 def test_sycophancy_exploits_heuristic_but_length_control_is_available():
-    """The heuristic IS exploitable by sycophancy prefixes.
+    """The heuristic is exploitable by sycophancy prefixes.
 
-    That is the finding the reward-hacking section documents. This test
-    asserts two things at once:
+    This test asserts two things at once:
 
     1. The heuristic prefers the sycophantic response over the identical
-       one without a prefix (that is the reward-hacking behavior).
-    2. The length parity check is still available and shows the win rate
-       under near-length-parity, so a downstream consumer has a signal to
+       one without a prefix, which is the reward-hacking behavior the
+       calibration gate is designed to distrust.
+    2. The length parity check is populated and reports a win rate under
+       near-length-parity, giving a downstream consumer a signal to
        distrust the raw number.
 
-    If a future judge (LLM) stops being exploitable by sycophancy, this
-    test's assertion set will need to be relaxed to 'either judge resists
-    or the length control catches it'.
+    When a judge becomes robust to sycophancy on its own, the assertion
+    set can be relaxed to 'either the judge resists or the length control
+    catches it'.
     """
     rows = _synth_rows()
     attacked = apply_policy(rows, "policy_b", sycophancy_policy())
@@ -71,12 +71,12 @@ def test_sycophancy_exploits_heuristic_but_length_control_is_available():
     judge = HeuristicJudge()
     result = compare_policies(judge, attacked, "policy_a", "policy_b")
 
-    # (1) Reward-hacking behavior is documented, not swept under.
+    # (1) Reward-hacking behavior is documented.
     assert result.win_rate_b >= 0.7, (
         f"expected heuristic to be exploited by sycophancy prefix, got {result.win_rate_b}"
     )
     # (2) Length parity metric is populated (the sycophancy prefix is short,
-    # so parity should apply). Downstream reviewers use this to distrust the
+    # so parity applies). Downstream consumers use this to distrust the
     # raw number.
     assert result.length_controlled_win_rate_b is not None, (
         "length-controlled win rate should be defined even under sycophancy attack"
